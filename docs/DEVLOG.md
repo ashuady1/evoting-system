@@ -672,6 +672,26 @@ installed PostgreSQL 16 instance.
 
 ---
 
+**Runtime pinning didn't actually work — switched to psycopg3 instead:**
+`backend/runtime.txt` (`python-3.11.9`) was added after first hitting
+`ImportError: undefined symbol: _PyInterpreterState_Get` on deploy, on
+the assumption Render would honor it the way Heroku's older convention
+does. It didn't — the same error recurred with Render still running
+Python 3.14. The actual fix: switched from `psycopg2-binary` (maintenance-
+only, precompiled wheels lag behind new Python releases) to `psycopg`
+(v3, actively maintained, ships wheels for current Python versions) —
+this removes the Python-version-pinning problem entirely rather than
+fighting it. `database/db.py`'s Postgres wrapper was updated accordingly
+(`psycopg.rows.dict_row` instead of `psycopg2.extras.RealDictCursor`;
+otherwise the interface is unchanged). Re-verified all 82 checks pass
+against a real PostgreSQL instance with the new driver, and confirmed
+SQLite is unaffected. Left `runtime.txt` in place as a general
+stabilizer against other bleeding-edge-Python issues, even though it
+wasn't the fix for this specific error — worth knowing it may simply not
+be honored by Render's native Python service.
+
+---
+
 ## Milestones checklist
 
 - [x] Project structure, requirements, README

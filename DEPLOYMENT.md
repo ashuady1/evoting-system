@@ -63,7 +63,7 @@ export DATABASE_URL="postgresql://your_user:your_password@ep-xxxx.neon.tech/neon
 # Windows (PowerShell):
 $env:DATABASE_URL="postgresql://your_user:your_password@ep-xxxx.neon.tech/neondb?sslmode=require"
 
-pip install psycopg2-binary   # if you haven't already
+pip install "psycopg[binary]"   # if you haven't already
 python database/db.py
 python create_admin.py youradminname youradminpassword
 ```
@@ -83,13 +83,17 @@ account — it works from anywhere with internet, not just from Render.
    - **Build Command:** `pip install -r requirements.txt`
    - **Start Command:** `gunicorn app:app`
    - **Instance Type:** Free
-4. Add environment variables (under "Environment"):
-   - `DATABASE_URL` — the exact same Neon connection string from Step 2
-   - `SERVER_SECRET_KEY_HEX` — generate one:
+4. Add environment variables (click **Add Environment Variable** for
+   each one — type only the exact key name shown, nothing else, no
+   backticks/quotes/extra text):
+   - Key `DATABASE_URL`, Value: the exact same Neon connection string from Step 2
+   - Key `SERVER_SECRET_KEY_HEX`, Value: generate one on your own machine:
      ```bash
      python -c "import os; print(os.urandom(32).hex())"
      ```
-   - `SYSTEM_PEPPER_HEX` — generate a **different** one the same way
+     paste only the printed hex string
+   - Key `SYSTEM_PEPPER_HEX`, Value: run that same command again — it
+     prints a **different** random string each time — paste that one here
 5. Click **Create Web Service**. Render will build and deploy — first
    deploy takes a few minutes.
 6. Once live, Render gives you a URL like `https://your-app.onrender.com`
@@ -110,6 +114,26 @@ Visit:
 - [ ] Do one full dry-run vote (register a test student ID, log in, vote)
 - [ ] Bring a mobile hotspot as backup if the venue's wifi is uncertain
       (both Tailwind/fonts/icons and the app itself need internet)
+
+## Troubleshooting
+
+**"Environment variable keys must consist of alphabetic characters,
+digits, '_', '-', or '.'"** — something other than the plain variable
+name got into the Key field (usually backticks or extra text from a
+copy-paste). Re-type just `DATABASE_URL` (or whichever key) by hand
+rather than pasting, with nothing else in the box.
+
+**`ImportError: ...psycopg2/_psycopg...: undefined symbol:
+_PyInterpreterState_Get`** on startup — this means Render is running a
+newer Python than the old `psycopg2-binary` package's precompiled wheel
+supports. In practice, `runtime.txt` / a `PYTHON_VERSION` environment
+variable didn't reliably fix this on Render. The actual fix (already
+applied in this project): use `psycopg` (v3) instead of `psycopg2` —
+it's actively maintained with wheels for current Python versions, so
+there's no version to pin in the first place. If you ever see this error
+again, check `requirements.txt` says `psycopg[binary]`, not
+`psycopg2-binary`, and that `database/db.py` imports `psycopg`, not
+`psycopg2`.
 
 ## If something changes later
 

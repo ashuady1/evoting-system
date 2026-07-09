@@ -12,6 +12,14 @@ other file just calls get_connection(), run_query(), or run_insert() from
 here. The two engines differ in a few real ways (placeholder syntax,
 how you get a newly-inserted row's id back, schema syntax), and all of
 that is handled in this one file.
+
+Uses `psycopg` (v3), not the older `psycopg2` — psycopg2 is in
+maintenance-only mode and its precompiled wheels lag behind new Python
+releases (this caused a real deploy failure: Render's default Python was
+newer than psycopg2-binary's wheel supported, raising an
+"undefined symbol" ImportError no matter which Python version we tried
+to pin). psycopg (v3) is actively maintained with wheels for current
+Python versions, which sidesteps that problem entirely.
 """
 
 import os
@@ -25,16 +33,16 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 IS_POSTGRES = bool(DATABASE_URL)
 
 if IS_POSTGRES:
-    import psycopg2
-    import psycopg2.extras
-    IntegrityError = psycopg2.IntegrityError
+    import psycopg
+    import psycopg.rows
+    IntegrityError = psycopg.IntegrityError
 else:
     IntegrityError = sqlite3.IntegrityError
 
 
 class _PostgresConnection:
     """
-    Wraps a psycopg2 connection so it exposes the same .execute(sql, params)
+    Wraps a psycopg connection so it exposes the same .execute(sql, params)
     shortcut that sqlite3.Connection provides natively — this is what lets
     every other file in the codebase call conn.execute(...) without caring
     which database engine is actually running.
@@ -43,7 +51,7 @@ class _PostgresConnection:
         self._conn = pg_conn
 
     def execute(self, query, params=()):
-        cursor = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cursor = self._conn.cursor(row_factory=psycopg.rows.dict_row)
         cursor.execute(query.replace("?", "%s"), params)
         return cursor
 
@@ -65,7 +73,7 @@ def get_connection():
     """Returns a connection with a uniform .execute()/.commit()/.close()
     interface, backed by SQLite or PostgreSQL depending on DATABASE_URL."""
     if IS_POSTGRES:
-        return _PostgresConnection(psycopg2.connect(DATABASE_URL))
+        return _PostgresConnection(psycopg.connect(DATABASE_URL))
 
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
