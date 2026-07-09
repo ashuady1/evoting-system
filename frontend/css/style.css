@@ -1,0 +1,98 @@
+/* =========================================================================
+   Minimal custom CSS — everything else is Tailwind utility classes now
+   (loaded via CDN in each page's <head>). What's kept here is only what
+   Tailwind utilities can't express cleanly: the bespoke wax-seal stamp
+   shape, the drifting background blobs, a guaranteed :has() fallback for
+   candidate-card selection (in case Tailwind's arbitrary has-[] variant
+   isn't picked up by the CDN's runtime JIT for dynamically-injected
+   content), and small third-party (flatpickr) theme tweaks.
+   ========================================================================= */
+
+:root {
+  --ink-900: #16233a;
+  --seal-crimson: #a23b3b;
+  --verified-teal: #2f6f62;
+  --verified-teal-light: #eaf3f0;
+  --hairline: #ddd4bf;
+}
+
+/* ---- Wax-seal stamp — the one bespoke shape in the whole UI ------------- */
+
+.stamp-large {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  border-radius: 50%;
+  border: 3px solid var(--verified-teal);
+  color: var(--verified-teal);
+  font-family: "Fraunces", Georgia, serif;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.82rem;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 8px 24px rgba(47,111,98,0.25);
+  background: radial-gradient(circle at 35% 30%, #fff, var(--verified-teal-light));
+  animation: popIn 0.5s cubic-bezier(0.4,0,0.2,1);
+  transform: rotate(-6deg);
+}
+.stamp-large::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1px dashed var(--verified-teal);
+  border-radius: 50%;
+  opacity: 0.4;
+}
+.stamp-large .stamp-sub { font-size: 0.62rem; opacity: 0.85; margin-top: 0.2rem; letter-spacing: 0.1em; }
+
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.7) rotate(-14deg); }
+  70% { transform: scale(1.06) rotate(-6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-6deg); }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.reanimate { animation: fadeInUp 0.35s cubic-bezier(0.4,0,0.2,1); }
+
+/* ---- Background blobs (voter portal) ------------------------------------ */
+
+.blob { position: absolute; border-radius: 9999px; filter: blur(70px); opacity: 0.28; }
+.blob-a { width: 460px; height: 460px; background: #c15a5a; top: -150px; left: -130px; animation: blobA 20s ease-in-out infinite; }
+.blob-b { width: 420px; height: 420px; background: #eaf3f0; bottom: -170px; right: -110px; animation: blobB 24s ease-in-out infinite; }
+@keyframes blobA { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(50px, 35px); } }
+@keyframes blobB { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-40px,-45px); } }
+
+/* ---- Candidate card selection — guaranteed fallback --------------------- */
+
+.candidate-card:has(input:checked) {
+  border-color: var(--verified-teal) !important;
+  background: var(--verified-teal-light) !important;
+  box-shadow: 0 0 0 3px rgba(47,111,98,0.16), 0 8px 20px rgba(22,35,58,0.10);
+}
+.candidate-card:has(input:checked) .check-badge { opacity: 1 !important; transform: scale(1) !important; }
+
+/* ---- Spinner (admin dashboard async loads) ------------------------------ */
+
+.spinner {
+  display: inline-block;
+  width: 1.1rem; height: 1.1rem;
+  border: 2px solid var(--hairline);
+  border-top-color: var(--seal-crimson);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- flatpickr theme tweaks to match the palette ------------------------ */
+
+.flatpickr-calendar { font-family: Inter, ui-sans-serif, system-ui; box-shadow: 0 10px 30px rgba(22,35,58,0.18); border-radius: 12px; }
+.flatpickr-day.selected, .flatpickr-day.selected:hover { background: var(--seal-crimson); border-color: var(--seal-crimson); }
+.flatpickr-time input:hover, .flatpickr-time .flatpickr-am-pm:hover { background: var(--verified-teal-light); }
+.flatpickr-day:hover { background: #f2ede1; }

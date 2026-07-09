@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Election Admin</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='%2316233a'/%3E%3Cpath d='M8 12.5l2.5 2.5L16 9.5' stroke='%23fbf8f2' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          display: ['Fraunces', 'ui-serif', 'Georgia', 'serif'],
+        },
+        colors: {
+          ink: { 900: '#16233a', 800: '#1f3350', 700: '#2c4468', 600: '#3c5a82' },
+          seal: { DEFAULT: '#a23b3b', dark: '#7e2c2c', light: '#c15a5a' },
+          verified: { DEFAULT: '#2f6f62', dark: '#234f45', light: '#eaf3f0' },
+          paper: { 50: '#fbf8f2', 100: '#f2ede1', 200: '#e6ddc8' },
+        },
+        boxShadow: { card: '0 1px 2px rgba(22,35,58,0.05), 0 10px 28px rgba(22,35,58,0.09)' },
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="font-sans bg-paper-50 text-ink-900 antialiased">
+
+<header class="sticky top-0 z-30 bg-gradient-to-br from-ink-900 to-ink-800 text-paper-50 shadow-lg">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-2.5 font-display text-lg tracking-wide">
+      <svg viewBox="0 0 24 24" fill="none" class="w-7 h-7"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Election Admin
+    </div>
+    <a href="/" class="text-sm text-paper-100/75 hover:text-white transition">Voter portal →</a>
+  </div>
+</header>
+
+<!-- ===================== ADMIN LOGIN ===================== -->
+<div class="max-w-md mx-auto px-6 py-16" id="view-admin-login">
+  <div id="login-msg" class="mb-4"></div>
+  <div class="bg-white rounded-2xl shadow-card border border-paper-200 p-8">
+    <h2 class="font-display text-2xl mb-1 text-ink-900">Admin sign in</h2>
+    <p class="text-sm text-slate-500 mb-6">Manage elections, voters, and security.</p>
+    <label class="block text-sm font-semibold text-ink-800 mb-1.5">Username</label>
+    <input id="admin-user" class="w-full mb-4 px-3.5 py-2.5 border border-paper-200 rounded-lg bg-paper-50 focus:outline-none focus:ring-2 focus:ring-ink-700 transition">
+    <label class="block text-sm font-semibold text-ink-800 mb-1.5">Password</label>
+    <input type="password" id="admin-pass" class="w-full mb-6 px-3.5 py-2.5 border border-paper-200 rounded-lg bg-paper-50 focus:outline-none focus:ring-2 focus:ring-ink-700 transition">
+    <button onclick="adminLogin()" class="w-full py-3 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold shadow-md transition">Sign in</button>
+    <p class="text-xs text-slate-400 mt-4">No admin account yet? Run <code class="bg-paper-100 px-1.5 py-0.5 rounded">python create_admin.py</code> from the backend folder.</p>
+  </div>
+</div>
+
+<!-- ===================== DASHBOARD ===================== -->
+<div class="hidden md:flex" id="view-dashboard" style="min-height: calc(100vh - 64px);">
+  <aside class="w-60 shrink-0 bg-gradient-to-b from-ink-800 to-ink-900 text-paper-100 p-5">
+    <nav class="space-y-1">
+      <button class="nav-link active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition" data-tab="voters" onclick="showTab('voters')">
+        <i data-lucide="users" class="w-4.5 h-4.5"></i> Authorized voters
+      </button>
+      <button class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition" data-tab="elections" onclick="showTab('elections')">
+        <i data-lucide="calendar" class="w-4.5 h-4.5"></i> Elections
+      </button>
+      <button class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition" data-tab="results" onclick="showTab('results')">
+        <i data-lucide="bar-chart-3" class="w-4.5 h-4.5"></i> Results
+      </button>
+      <button class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition" data-tab="security" onclick="showTab('security')">
+        <i data-lucide="shield-alert" class="w-4.5 h-4.5"></i> Security &amp; anomalies
+      </button>
+    </nav>
+    <button onclick="adminLogout()" class="mt-8 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-paper-100/60 hover:text-white hover:bg-white/5 transition">
+      <i data-lucide="log-out" class="w-4.5 h-4.5"></i> Sign out
+    </button>
+  </aside>
+
+  <div class="flex-1 px-8 py-9 max-w-4xl">
+    <div id="dash-msg" class="mb-5"></div>
+
+    <!-- ---- Voters tab ---- -->
+    <section id="tab-voters">
+      <h2 class="font-display text-2xl mb-1 text-ink-900">Authorized voters</h2>
+      <p class="text-sm text-slate-500 mb-5">Paste one student ID per line. Only these IDs will be able to register.</p>
+      <div class="bg-white rounded-2xl shadow-card border border-paper-200 p-6">
+        <textarea id="voter-ids" rows="6" class="w-full px-3.5 py-2.5 border border-paper-200 rounded-lg bg-paper-50 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ink-700 transition" placeholder="79010020&#10;79010054&#10;79010119"></textarea>
+        <button onclick="uploadVoters()" class="mt-4 px-6 py-2.5 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold text-sm shadow-md transition">Add to authorized list</button>
+      </div>
+    </section>
+
+    <!-- ---- Elections tab ---- -->
+    <section id="tab-elections" class="hidden">
+      <h2 class="font-display text-2xl mb-1 text-ink-900">Elections</h2>
+      <p class="text-sm text-slate-500 mb-5">Build a ballot, then open it once every position has at least two candidates.</p>
+
+      <div class="bg-white rounded-2xl shadow-card border border-paper-200 p-6 mb-6">
+        <h3 class="font-semibold text-ink-900 mb-4">Create a new election</h3>
+        <label class="block text-sm font-semibold text-ink-800 mb-1.5">Title</label>
+        <input type="text" id="el-title" class="w-full mb-4 px-3.5 py-2.5 border border-paper-200 rounded-lg bg-paper-50 focus:outline-none focus:ring-2 focus:ring-ink-700 transition" placeholder="2026 Student Council Election">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-semibold text-ink-800 mb-1.5">Start</label>
+            <input type="text" id="el-start" class="w-full px-3.5 py-2.5 border border-paper-200 rounded-lg bg-paper-50 focus:outline-none focus:ring-2 focus:ring-ink-700 transition" placeholder="Pick date &amp; time">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-ink-800 mb-1.5">End</label>
+            <input type="text" id="el-end" class="w-full px-3.5 py-2.5 border border-paper-200 rounded-lg bg-paper-50 focus:outline-none focus:ring-2 focus:ring-ink-700 transition" placeholder="Pick date &amp; time">
+          </div>
+        </div>
+        <button onclick="createElection()" class="mt-5 px-6 py-2.5 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold text-sm shadow-md transition">Create election (draft)</button>
+      </div>
+
+      <div id="elections-manage-list" class="space-y-5"></div>
+    </section>
+
+    <!-- ---- Results tab ---- -->
+    <section id="tab-results" class="hidden">
+      <h2 class="font-display text-2xl mb-1 text-ink-900">Results</h2>
+      <p class="text-sm text-slate-500 mb-5">Select a closed election to decrypt and tally its votes.</p>
+      <div class="flex items-center gap-3 mb-6">
+        <select id="results-election-select" class="px-3.5 py-2.5 border border-paper-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-ink-700 transition"></select>
+        <button onclick="loadResults()" class="px-5 py-2.5 rounded-full border border-paper-200 hover:bg-paper-100 font-semibold text-sm transition">Load results</button>
+      </div>
+      <div id="results-display"></div>
+    </section>
+
+    <!-- ---- Security tab ---- -->
+    <section id="tab-security" class="hidden">
+      <h2 class="font-display text-2xl mb-1 text-ink-900">Security &amp; anomalies</h2>
+      <p class="text-sm text-slate-500 mb-5">Runs Isolation Forest over all recorded login behavior to flag suspicious patterns.</p>
+      <button onclick="loadAnomalies()" class="px-6 py-2.5 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold text-sm shadow-md transition">Scan now</button>
+      <div id="anomalies-display" class="mt-6"></div>
+    </section>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/widgets.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>
