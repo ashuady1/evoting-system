@@ -32,6 +32,29 @@ def is_authorized(id_hash: str) -> bool:
     return row is not None
 
 
+def list_authorized_voters():
+    """
+    Returns every authorized entry with its (one-way) hash and whether
+    that hash has a matching registered voter yet. Never the original
+    student ID — hashing here is genuinely one-way by design (see
+    schema.sql), so the admin view can only ever show a fingerprint plus
+    registration status, not the literal ID that was uploaded.
+    """
+    return run_query(
+        """SELECT av.student_id_hash, av.added_at,
+                  (v.id IS NOT NULL) AS is_registered
+           FROM authorized_voters av
+           LEFT JOIN voters v ON v.student_id_hash = av.student_id_hash
+           ORDER BY av.added_at DESC""",
+        fetch="all",
+    )
+
+
+def count_authorized_voters() -> int:
+    row = run_query("SELECT COUNT(*) as cnt FROM authorized_voters", fetch="one")
+    return row["cnt"]
+
+
 # ---- voters -------------------------------------------------------------
 
 def get_voter_by_id_hash(id_hash: str):

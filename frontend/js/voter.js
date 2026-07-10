@@ -42,6 +42,9 @@ function openModal(name) {
   if (name === "register") {
     document.getElementById("register-step-form").classList.remove("hidden");
     document.getElementById("register-step-done").classList.add("hidden");
+    document.getElementById("reg-id").value = "";
+    document.getElementById("reg-pw").value = "";
+    document.getElementById("reg-pw-confirm").value = "";
   }
 }
 
@@ -75,6 +78,12 @@ function backToHome() {
 async function doRegister() {
   const studentId = document.getElementById("reg-id").value.trim();
   const password = document.getElementById("reg-pw").value;
+  const confirmPassword = document.getElementById("reg-pw-confirm").value;
+
+  if (password !== confirmPassword) {
+    return showMessage(msgBox(), "Passwords don't match — please retype them.", "error");
+  }
+
   const { ok, data } = await API.post("/voter/register", { student_id: studentId, password });
   if (!ok) return showMessage(msgBox(), data.error || "Registration failed.", "error");
 
@@ -122,13 +131,13 @@ async function doLoginStep2() {
 
 async function loadHome() {
   const container = document.getElementById("elections-grid");
-  container.innerHTML = `<div class="col-span-2 flex items-center justify-center gap-2 text-slate-400 py-10"><span class="spinner"></span> Loading elections…</div>`;
+  container.innerHTML = `<div class="flex items-center justify-center gap-2 text-slate-400 py-10"><span class="spinner"></span> Loading elections…</div>`;
 
   const { ok, data } = await API.get("/voter/public/elections");
-  if (!ok) { container.innerHTML = `<p class="text-slate-400 col-span-2">Could not load elections.</p>`; return; }
+  if (!ok) { container.innerHTML = `<p class="text-slate-400">Could not load elections.</p>`; return; }
 
   if (!data.elections.length) {
-    container.innerHTML = `<div class="col-span-2 text-center py-14 text-slate-400"><i data-lucide="calendar-x" class="w-10 h-10 mx-auto mb-3 opacity-50"></i><p>There are no open elections right now. Check back soon.</p></div>`;
+    container.innerHTML = `<div class="text-center py-14 text-slate-400 glass-card rounded-2xl"><i data-lucide="calendar-x" class="w-10 h-10 mx-auto mb-3 opacity-50"></i><p>There are no open elections right now. Check back soon.</p></div>`;
     refreshIcons();
     return;
   }
@@ -138,25 +147,25 @@ async function loadHome() {
     const pct = e.turnout_percent;
     const actionLabel = loggedIn ? "View &amp; vote" : "Log in to vote";
     const actionClasses = loggedIn
-      ? "bg-seal hover:bg-seal-dark text-white shadow-md"
-      : "bg-paper-100 hover:bg-paper-200 text-ink-800";
+      ? "bg-seal hover:bg-seal-dark text-white shadow-lg shadow-seal/20"
+      : "bg-white/10 hover:bg-white/15 text-white border border-white/15";
     const onclick = loggedIn ? `openBallot(${e.election_id})` : `openModal('login')`;
     return `
-      <div class="bg-white rounded-2xl border border-paper-200 shadow-card p-6 hover:shadow-lg transition">
+      <div class="glass-card rounded-2xl p-6 transition">
         <div class="flex items-start justify-between mb-3 gap-3">
-          <h3 class="font-display text-lg text-ink-900 leading-snug">${escapeHtml(e.title)}</h3>
-          <span class="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-verified bg-verified-light px-2.5 py-1 rounded-full"><i data-lucide="radio" class="w-3 h-3"></i> Live</span>
+          <h3 class="font-display text-lg text-white leading-snug">${escapeHtml(e.title)}</h3>
+          <span class="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-verified-light bg-verified/20 border border-verified/30 px-2.5 py-1 rounded-full"><i data-lucide="radio" class="w-3 h-3"></i> Live</span>
         </div>
-        <p class="text-sm text-slate-500 mb-4 flex items-center gap-1.5"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Closes ${escapeHtml(e.end_time)}</p>
+        <p class="text-sm text-slate-400 mb-4 flex items-center gap-1.5"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Closes ${escapeHtml(e.end_time)}</p>
 
-        <div class="mb-1 flex items-center justify-between text-xs text-slate-500">
+        <div class="mb-1 flex items-center justify-between text-xs text-slate-400">
           <span>Turnout</span>
-          <span class="font-semibold text-ink-800">${pct}%</span>
+          <span class="font-semibold text-slate-200">${pct}%</span>
         </div>
-        <div class="w-full bg-paper-100 rounded-full h-2 overflow-hidden">
+        <div class="w-full bg-white/10 rounded-full h-2 overflow-hidden">
           <div class="h-full bg-gradient-to-r from-verified to-seal rounded-full transition-all" style="width:${pct}%"></div>
         </div>
-        <p class="text-xs text-slate-400 mt-1.5">${e.voted_count} of ${e.total_voters} registered voters</p>
+        <p class="text-xs text-slate-500 mt-1.5">${e.voted_count} of ${e.total_voters} registered voters</p>
 
         <button onclick="${onclick}" class="mt-5 w-full py-2.5 rounded-full font-semibold text-sm transition ${actionClasses}">${actionLabel}</button>
       </div>

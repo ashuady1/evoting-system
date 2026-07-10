@@ -119,3 +119,30 @@ def validate_voter_session(session_token: str, device_hash: str) -> dict | None:
     if payload.get("device_hash") != device_hash:
         return None
     return payload
+
+
+def list_authorized_voters() -> dict:
+    """
+    Admin-facing view of the authorized voter list. Shows a short
+    fingerprint of each entry's hash (never the original student ID —
+    the hash is one-way by design) plus whether that ID has registered.
+    """
+    rows = queries.list_authorized_voters()
+    entries = [
+        {
+            "hash_fingerprint": row["student_id_hash"][:12],
+            "added_at": str(row["added_at"]),
+            # SQLite returns 0/1 for this boolean expression, PostgreSQL
+            # returns True/False — normalize so the API response is
+            # identical regardless of which database is active.
+            "is_registered": bool(row["is_registered"]),
+        }
+        for row in rows
+    ]
+    registered_count = sum(1 for e in entries if e["is_registered"])
+    return {
+        "success": True,
+        "entries": entries,
+        "total": len(entries),
+        "registered_count": registered_count,
+    }

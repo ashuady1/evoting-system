@@ -42,6 +42,7 @@ function showTab(tab) {
     btn.classList.add(...(active ? NAV_ACTIVE : NAV_INACTIVE));
   });
   clearMessage(dashMsg());
+  if (tab === "voters") loadAuthorizedVoters();
   if (tab === "elections") { initCreateFormPickers(); loadElectionsManage(); }
   if (tab === "results") loadElectionsForResultsDropdown();
   refreshIcons();
@@ -69,6 +70,44 @@ async function uploadVoters() {
   if (!ok) return showMessage(dashMsg(), data.error || "Upload failed.", "error");
   showMessage(dashMsg(), `Added ${data.added} student ID(s) to the authorized voter list.`, "success");
   document.getElementById("voter-ids").value = "";
+  loadAuthorizedVoters();
+}
+
+async function loadAuthorizedVoters() {
+  const display = document.getElementById("voters-list-display");
+  display.innerHTML = `<div class="flex items-center gap-2 text-slate-400 py-6"><span class="spinner"></span> Loading list…</div>`;
+
+  const { ok, data } = await API.get("/admin/voters/list", Session.getAdminToken());
+  if (!ok) { display.innerHTML = `<p class="text-slate-400 text-sm">Could not load the list.</p>`; return; }
+
+  if (!data.total) {
+    display.innerHTML = `<p class="text-slate-400 text-sm">No student IDs authorized yet — add some above.</p>`;
+    return;
+  }
+
+  const rows = data.entries.map(e => `
+    <tr class="border-b border-paper-100">
+      <td class="py-2 text-sm font-mono text-slate-500">${escapeHtmlA(e.hash_fingerprint)}…</td>
+      <td class="py-2 text-sm">
+        ${e.is_registered
+          ? `<span class="inline-flex items-center gap-1 text-xs font-semibold text-verified"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Registered</span>`
+          : `<span class="inline-flex items-center gap-1 text-xs font-semibold text-slate-400"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Not yet registered</span>`}
+      </td>
+      <td class="py-2 text-sm text-slate-400">${escapeHtmlA(e.added_at)}</td>
+    </tr>
+  `).join("");
+
+  display.innerHTML = `
+    <div class="text-sm text-slate-500 mb-3">${data.registered_count} of ${data.total} authorized IDs have registered.</div>
+    <div class="bg-white rounded-2xl border border-paper-200 shadow-card p-6 overflow-x-auto">
+      <table class="w-full">
+        <thead><tr class="text-xs uppercase tracking-wide text-slate-400"><th class="text-left pb-2">ID fingerprint</th><th class="text-left pb-2">Status</th><th class="text-left pb-2">Added</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-400 mt-3 flex items-start gap-1.5"><i data-lucide="info" class="w-3.5 h-3.5 shrink-0 mt-0.5"></i> Student IDs are stored as one-way hashes and can't be shown in original form — the fingerprint above confirms an entry exists without exposing the ID itself.</p>
+  `;
+  refreshIcons();
 }
 
 async function createElection() {

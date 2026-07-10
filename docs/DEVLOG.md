@@ -690,6 +690,104 @@ stabilizer against other bleeding-edge-Python issues, even though it
 wasn't the fix for this specific error — worth knowing it may simply not
 be honored by Render's native Python service.
 
+**Version pin corrected:** the first attempt pinned `psycopg[binary]==3.2.3`,
+a version that doesn't actually exist on PyPI (available releases jump
+from the 3.2.x line to 3.2.10+) — an error on my part, not a deeper
+issue. Corrected to `psycopg[binary]==3.3.4`, the exact version
+installed and tested locally, and re-confirmed all 82 checks pass on
+both SQLite and a real PostgreSQL instance with this exact pin.
+
+---
+
+## Entry 18 — Admin sidebar fix, authorized voters list, and voter portal redesign
+
+**Admin sidebar misalignment — root cause found, not guessed at:**
+the "Security & anomalies" button (and all sidebar icons) used
+`class="w-4.5 h-4.5"` — not a valid Tailwind utility (the default scale
+only defines whole and half steps like `w-4`/`w-5`, not `w-4.5`), so it
+silently failed to apply and every icon fell back to Lucide's default
+(larger) size. Combined with "Security & anomalies" being the longest
+label in a fixed-width sidebar, this was the most likely cause of the
+"shifted right" look reported. Fixed by using valid `w-5 h-5 shrink-0`
+throughout, and shortened the sidebar label to "Security" (the tab's own
+heading still says the full "Security & anomalies") so the longest
+button no longer risks wrapping or crowding.
+
+**Sign out separated from the tab list:** the sidebar `<aside>` is now
+`flex flex-col`, and Sign out sits in its own block with `mt-auto` and a
+top border — pinned to the bottom of the sidebar regardless of how many
+tabs exist above it, rather than just being the last item in the same
+vertical list.
+
+**Authorized voters list — a real constraint, not just a feature add:**
+student IDs are stored as one-way SHA-256 hashes (deliberately — see
+Entry 1 area of this log on the anonymity/security design), which means
+**the original ID can never be shown back**, by design. Built the most
+useful honest alternative instead: `GET /admin/voters/list` returns each
+entry's hash *fingerprint* (first 12 hex chars — enough to visually
+distinguish entries, not enough to be the ID) plus whether that hash has
+a matching registered voter yet, via a `LEFT JOIN` against `voters`.
+This is arguably more useful day-to-day than seeing raw IDs anyway
+("how many have registered so far?"). The boolean from that join is
+normalized in the service layer (`bool(row["is_registered"])`) because
+SQLite returns `0`/`1` for a boolean SQL expression while PostgreSQL
+returns real `True`/`False` — left un-normalized, the API response shape
+would differ between local dev and production.
+
+**Password confirmation on registration:** a second "retype password"
+field, checked client-side before the request is even sent
+(`password !== confirmPassword`). Deliberately not a backend change —
+this is a UX safeguard against typos, not a security control, so
+client-side is the right (and simplest) place for it.
+
+**Voter portal: dark theme + two-column layout.** Full redesign of the
+voter-facing shell (admin dashboard untouched, as it was previously
+signed off separately):
+- Background is a radial dark gradient (`ink-950` family) with an
+  animated, slowly-drifting dot-grid (CSS `background-position`
+  keyframe) plus three soft blurred "aurora" glows in the brand's
+  crimson/teal/ink tones — subtle motion, not a busy pattern, and
+  wrapped in `prefers-reduced-motion` so it turns static for anyone who
+  needs that.
+- Home page changed from stacked-and-centered (hero above elections,
+  the main source of the reported excess whitespace) to a two-column
+  `lg:grid-cols-2` layout — hero text and CTAs on the left (sticky, so
+  it stays in view while the elections list scrolls on tall pages),
+  ongoing elections on the right. Stacks back to a single column
+  automatically on small screens.
+- Election cards became "glass" cards (`.glass-card`: translucent white
+  fill, blurred backdrop, soft border) since flat light cards would have
+  looked disconnected sitting on the new dark background.
+- Login/Register modals restyled to match (dark modal body, translucent
+  inputs) rather than leaving light-on-dark modals inconsistent with the
+  rest of the page.
+- Ballot casting and confirmation screens were deliberately **kept as
+  light cards** floating on the dark shell — candidate photos, radio
+  selection states, and dense form content are easiest to keep reliably
+  readable on a light surface, and this "dark chrome, light task
+  surface" split is a common, intentional pattern (not an oversight)
+  rather than an all-or-nothing dark mode.
+
+**Bug fixed in passing:** `.message` (the CSS class every success/error
+alert box depends on, via `showMessage()` in `api.js`) had been
+accidentally dropped from the stylesheet during an earlier Tailwind
+rewrite — meaning every alert on both the voter and admin pages has been
+rendering as invisible, unstyled text since that rewrite. Restored as a
+light "chip" style that reads clearly on both the dark voter portal and
+the light admin dashboard, found while touching this file for the
+theme change rather than through separate testing — worth noting in the
+report as an example of regressions that pure backend testing can't
+catch, since all 82 automated checks were passing the entire time this
+was broken.
+
+**Validation approach:** re-ran all six backend suites (82 checks) after
+the schema/backend changes (authorized voters list) — all pass. Verified
+the new `/admin/voters/list` endpoint directly: upload two IDs, confirm
+both show `is_registered: false`, register one, confirm the list updates
+to reflect it without re-uploading. Verified the stylesheet's braces
+balance (47/47) and that both pages still serve with all new markup and
+JS hooks present via the Flask test client.
+
 ---
 
 ## Milestones checklist

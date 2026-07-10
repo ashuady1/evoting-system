@@ -13,10 +13,10 @@ from functools import wraps
 from flask import Blueprint, request, jsonify
 
 from database import queries
+from services.auth_service import hash_student_id, list_authorized_voters
 from security.hashing import generate_salt, hash_with_salt, verify_hash
 from security import tokens
 from security.config_secrets import SERVER_SECRET_KEY
-from services.auth_service import hash_student_id
 from services import election_service, ballot_service, anomaly_service
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -77,6 +77,12 @@ def upload_voters():
         queries.add_authorized_voter(hash_student_id(str(student_id)))
 
     return jsonify({"success": True, "added": len(student_ids)})
+
+
+@admin_bp.route("/voters/list", methods=["GET"])
+@require_admin
+def list_voters():
+    return jsonify(list_authorized_voters())
 
 
 # ---- election management ---------------------------------------------------
