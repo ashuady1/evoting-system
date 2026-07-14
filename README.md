@@ -19,10 +19,12 @@ You should see: `Database initialized at .../evoting.db`
 
 ## Run the whole thing (server + frontend)
 
-**If you set up the project before candidate photos were added:** delete
-`backend/database/evoting.db` first — SQLite doesn't auto-add new
-columns to an existing table, so the old database won't have the photo
-fields the candidate form now sends.
+**If you set up the project before candidate photos, publish-results, or
+email verification were added:** for local SQLite, just delete
+`backend/database/evoting.db` and re-run `python database/db.py` — it's
+throwaway dev data, easiest to start fresh. (If you have a live
+PostgreSQL deployment with real data, don't delete anything — run the
+migration scripts instead; see `DEPLOYMENT.md`'s Migrations section.)
 
 ```bash
 python database/db.py      # if you haven't already
@@ -88,6 +90,12 @@ along the way.
 - `frontend/` — voter portal (`index.html`) and admin dashboard (`admin.html`), built with Tailwind CSS, Google Fonts, Lucide icons, and flatpickr (all via CDN — see the internet-connection note above), served directly by Flask
 - `routes/dev_routes.py` — **demo-only** OTP auto-fill endpoint (see docs/DEVLOG.md Entry 12 — must be removed before any real deployment)
 - `test_full_demo_flow.py` — replays the entire presentation script end-to-end through every API call the UI makes (17 checks)
+- `database/migrate_add_results_published.py` — non-destructive migration adding the results-publishing columns to an existing database (run this once if you deployed before this feature — see DEPLOYMENT.md)
+- `test_publish_results.py` — publish/visibility rules for admin-published results, including the public-facing gating (14 checks)
+- `services/email_service.py` — sends registration verification codes via SMTP (dev-mode fallback when unconfigured — see DEPLOYMENT.md)
+- `database/migrate_add_email_hash.py` — non-destructive migration adding email verification support to an existing database (run this once if you deployed before this feature)
+- `test_helpers.py` — shared `authorize_register_and_login()` helper used across the other test suites
+- `test_auth_flow.py` — now also covers the full email verification flow: wrong email, missing email on file, wrong code, spent-token reuse (21 checks)
 
 ### Try the whole auth flow yourself (command line, no browser needed)
 
@@ -96,10 +104,13 @@ python test_auth_flow.py
 ```
 
 This resets a throwaway database, then runs through: unauthorized ID
-rejected → admin adds the ID → registration succeeds → duplicate
-registration rejected → wrong password rejected → correct password
-accepted → wrong OTP rejected → correct OTP accepted, session issued →
-admin login → protected voter-upload endpoint.
+rejected → registration rejected with no email on file → registration
+rejected with the wrong email → correct email starts registration
+(dev-mode verification code returned) → wrong code rejected → correct
+code completes registration → duplicate registration rejected → wrong
+password rejected → correct password accepted → wrong OTP rejected →
+correct OTP accepted, session issued → admin login → protected
+voter-upload endpoint.
 
 ## What's next (in build order)
 
@@ -111,9 +122,10 @@ admin login → protected voter-upload endpoint.
 6. ~~Isolation Forest anomaly detection on login behavior~~ ✅
 7. ~~Admin dashboard UI + voter portal frontend~~ ✅
 8. ~~UI overhaul: Tailwind/fonts/icons/flatpickr, home dashboard, election editing~~ ✅
-9. Polish pass / anything you want to add before the presentation (see docs/DEVLOG.md "Milestones checklist")
+9. ~~PostgreSQL support + publish results to a public voter-facing section~~ ✅
+10. Polish pass / anything you want to add before the presentation (see docs/DEVLOG.md "Milestones checklist")
 
-### Run all six test suites
+### Run all seven test suites
 
 ```bash
 python test_auth_flow.py
@@ -122,6 +134,7 @@ python test_election_editing_and_turnout.py
 python test_ballot_flow.py
 python test_anomaly_detection.py
 python test_full_demo_flow.py
+python test_publish_results.py
 ```
 
 Each resets the database at the start, so they're safe to re-run in any

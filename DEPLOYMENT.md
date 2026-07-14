@@ -94,6 +94,10 @@ account — it works from anywhere with internet, not just from Render.
      paste only the printed hex string
    - Key `SYSTEM_PEPPER_HEX`, Value: run that same command again — it
      prints a **different** random string each time — paste that one here
+   - **Optional but recommended:** SMTP variables so registration actually
+     emails verification codes instead of falling back to dev mode (see
+     "Setting up email sending" below) — `SMTP_HOST`, `SMTP_PORT`,
+     `SMTP_USERNAME`, `SMTP_PASSWORD`
 5. Click **Create Web Service**. Render will build and deploy — first
    deploy takes a few minutes.
 6. Once live, Render gives you a URL like `https://your-app.onrender.com`
@@ -114,6 +118,80 @@ Visit:
 - [ ] Do one full dry-run vote (register a test student ID, log in, vote)
 - [ ] Bring a mobile hotspot as backup if the venue's wifi is uncertain
       (both Tailwind/fonts/icons and the app itself need internet)
+
+## Setting up email sending (optional — free, but has a manual step)
+
+Registration verification codes are emailed to students. Without SMTP
+configured, the server falls back to returning the code directly in the
+API response (clearly labeled "dev mode" — see `services/
+email_service.py` and `docs/DEVLOG.md`), which is fine for demoing but
+not for a real election, since anyone could read the code without
+checking any inbox.
+
+**Free option: Gmail with an "app password"** (not your normal Gmail
+password — a separate, revocable one Google generates specifically for
+this):
+
+1. Go to your Google Account → **Security** → make sure **2-Step
+   Verification** is turned on (required before app passwords are
+   available).
+2. Still under Security, find **App passwords** (search "app passwords"
+   in the account settings search bar if you don't see it directly).
+3. Create one for "Mail" — Google shows you a 16-character password once.
+   Copy it.
+4. In Render's Environment tab, add:
+   - `SMTP_HOST` = `smtp.gmail.com`
+   - `SMTP_PORT` = `587`
+   - `SMTP_USERNAME` = your full Gmail address
+   - `SMTP_PASSWORD` = the 16-character app password from step 3 (not
+     your regular Gmail password)
+
+Gmail's free sending limit is generous enough for a class election
+(hundreds of emails/day). If you'd rather not use a personal Gmail
+account, **Brevo** (formerly Sendinblue) has a genuinely free-forever
+tier (300 emails/day, no card required) built specifically for this kind
+of transactional email — sign up, find their SMTP credentials under
+their dashboard's SMTP/API settings, and use those instead of Gmail's.
+
+**Important:** actual email delivery could not be tested from this
+project's development environment (no outbound access to mail servers
+during development — see docs/DEVLOG.md). Send yourself one test
+registration once this is configured, before relying on it for a real
+election.
+
+## Migrations (schema changes after you've already deployed)
+
+If you deployed before a feature that changed the database (like
+publishing results) was added, you need to run a **migration** against
+your live Neon database once — this adds new columns without touching
+any existing data.
+
+From your own machine, pointing at the same Neon connection string you
+used in Step 2:
+
+```bash
+cd evoting-system/backend
+export DATABASE_URL="postgresql://your_user:your_password@ep-xxxx.neon.tech/neondb?sslmode=require"
+python database/migrate_add_results_published.py
+python database/migrate_add_email_hash.py
+```
+
+You should see `Migration complete: ...`. This is safe to run more than
+once — it checks whether each column already exists before adding it,
+so re-running it does nothing the second time. Your existing elections,
+voters, and votes are untouched.
+
+**After running `migrate_add_email_hash.py` specifically:** any student
+IDs that were authorized *before* this migration have no email on file
+(`email_hash` is `NULL`) and won't be able to register until you
+re-upload them with an email through the admin dashboard's Authorized
+Voters tab — re-uploading an already-authorized ID updates its email
+rather than erroring, so this is safe to do.
+
+You do **not** need to redeploy on Render for this — migrations run
+directly against the database, independent of the app code. Just make
+sure Render is running the latest code (`git push` as usual) so it knows
+about the new columns/endpoints.
 
 ## Troubleshooting
 

@@ -88,6 +88,15 @@
       </div>
 
     </div>
+
+    <!-- Results — only shown once at least one election is closed & published -->
+    <div id="results-section" class="hidden mt-16 sm:mt-20">
+      <div class="flex items-center gap-2 mb-5">
+        <i data-lucide="award" class="w-5 h-5 text-verified-light"></i>
+        <h2 class="font-display text-2xl text-white">Results</h2>
+      </div>
+      <div id="results-grid" class="grid sm:grid-cols-2 gap-5"></div>
+    </div>
   </section>
 
   <!-- ===================== BALLOT ===================== -->
@@ -145,14 +154,24 @@
 
     <div id="register-step-form">
       <h3 class="font-display text-xl mb-1 text-white">Register to vote</h3>
-      <p class="text-sm text-slate-400 mb-5">Your student ID must already be on the authorized voter list.</p>
+      <p class="text-sm text-slate-400 mb-5">Your student ID and email must already be on the authorized voter list.</p>
       <label class="block text-sm font-semibold text-slate-200 mb-1.5">Student ID</label>
       <input id="reg-id" class="w-full mb-4 px-3.5 py-2.5 border border-white/15 rounded-lg bg-white/5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-seal transition" placeholder="e.g. 79010020">
+      <label class="block text-sm font-semibold text-slate-200 mb-1.5">University email</label>
+      <input id="reg-email" class="w-full mb-4 px-3.5 py-2.5 border border-white/15 rounded-lg bg-white/5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-seal transition" placeholder="you@pmc.edu.np">
       <label class="block text-sm font-semibold text-slate-200 mb-1.5">Choose a password</label>
       <input type="password" id="reg-pw" class="w-full mb-4 px-3.5 py-2.5 border border-white/15 rounded-lg bg-white/5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-seal transition" placeholder="At least 8 characters">
       <label class="block text-sm font-semibold text-slate-200 mb-1.5">Retype password</label>
       <input type="password" id="reg-pw-confirm" class="w-full mb-6 px-3.5 py-2.5 border border-white/15 rounded-lg bg-white/5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-seal transition" placeholder="Type it again">
-      <button onclick="doRegister()" class="w-full py-3 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold shadow-lg shadow-seal/20 transition">Register</button>
+      <button onclick="doRegister()" class="w-full py-3 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold shadow-lg shadow-seal/20 transition">Continue</button>
+    </div>
+
+    <div id="register-step-verify" class="hidden">
+      <h3 class="font-display text-xl mb-1 text-white">Verify your email</h3>
+      <p class="text-sm text-slate-400 mb-5" id="register-verify-subtext">Enter the 6-digit code we sent you.</p>
+      <input id="register-verify-code" maxlength="6" class="w-full mb-3 px-3.5 py-3 border border-white/15 rounded-lg bg-white/5 text-white text-center text-2xl tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-seal transition" placeholder="000000">
+      <button onclick="autofillRegistrationCode()" id="register-autofill-btn" class="hidden text-xs text-slate-400 hover:text-seal-light underline mb-6 block">Auto-fill code (dev)</button>
+      <button onclick="doVerifyRegistration()" class="w-full py-3 rounded-full bg-seal hover:bg-seal-dark text-white font-semibold shadow-lg shadow-seal/20 transition">Verify &amp; create account</button>
     </div>
 
     <div id="register-step-done" class="hidden text-center">

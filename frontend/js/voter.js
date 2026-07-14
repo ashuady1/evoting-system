@@ -5,6 +5,8 @@
 const msgBox = () => document.getElementById("msg");
 
 let pendingToken = null;
+let pendingRegistrationToken = null;
+let pendingRegistrationDevCode = null;
 let currentStudentId = null;
 let currentElectionId = null;
 let currentBallot = null;
@@ -41,10 +43,15 @@ function openModal(name) {
   }
   if (name === "register") {
     document.getElementById("register-step-form").classList.remove("hidden");
+    document.getElementById("register-step-verify").classList.add("hidden");
     document.getElementById("register-step-done").classList.add("hidden");
     document.getElementById("reg-id").value = "";
+    document.getElementById("reg-email").value = "";
     document.getElementById("reg-pw").value = "";
     document.getElementById("reg-pw-confirm").value = "";
+    document.getElementById("register-verify-code").value = "";
+    pendingRegistrationToken = null;
+    pendingRegistrationDevCode = null;
   }
 }
 
@@ -77,6 +84,7 @@ function backToHome() {
 
 async function doRegister() {
   const studentId = document.getElementById("reg-id").value.trim();
+  const email = document.getElementById("reg-email").value.trim();
   const password = document.getElementById("reg-pw").value;
   const confirmPassword = document.getElementById("reg-pw-confirm").value;
 
@@ -84,12 +92,42 @@ async function doRegister() {
     return showMessage(msgBox(), "Passwords don't match — please retype them.", "error");
   }
 
-  const { ok, data } = await API.post("/voter/register", { student_id: studentId, password });
+  const { ok, data } = await API.post("/voter/register/start", { student_id: studentId, email, password });
   if (!ok) return showMessage(msgBox(), data.error || "Registration failed.", "error");
 
-  Session.saveDemoSecret(studentId, data.totp_secret);
-  document.getElementById("reg-secret-display").textContent = data.totp_secret;
+  currentStudentId = studentId;
+  pendingRegistrationToken = data.pending_registration_token;
+  pendingRegistrationDevCode = data.dev_code || null;
+
+  const subtext = document.getElementById("register-verify-subtext");
+  const autofillBtn = document.getElementById("register-autofill-btn");
+  if (pendingRegistrationDevCode) {
+    subtext.textContent = `Email sending isn't configured on this server, so use the button below instead of checking ${email}.`;
+    autofillBtn.classList.remove("hidden");
+  } else {
+    subtext.textContent = `Enter the 6-digit code we sent to ${email}.`;
+    autofillBtn.classList.add("hidden");
+  }
+
   document.getElementById("register-step-form").classList.add("hidden");
+  document.getElementById("register-step-verify").classList.remove("hidden");
+}
+
+function autofillRegistrationCode() {
+  if (!pendingRegistrationDevCode) return;
+  document.getElementById("register-verify-code").value = pendingRegistrationDevCode;
+}
+
+async function doVerifyRegistration() {
+  const code = document.getElementById("register-verify-code").value.trim();
+  const { ok, data } = await API.post("/voter/register/verify", {
+    pending_registration_token: pendingRegistrationToken, code,
+  });
+  if (!ok) return showMessage(msgBox(), data.error || "Verification failed.", "error");
+
+  Session.saveDemoSecret(currentStudentId, data.totp_secret);
+  document.getElementById("reg-secret-display").textContent = data.totp_secret;
+  document.getElementById("register-step-verify").classList.add("hidden");
   document.getElementById("register-step-done").classList.remove("hidden");
   refreshIcons();
 }
@@ -132,6 +170,8 @@ async function doLoginStep2() {
 async function loadHome() {
   const container = document.getElementById("elections-grid");
   container.innerHTML = `<div class="flex items-center justify-center gap-2 text-slate-400 py-10"><span class="spinner"></span> Loading elections…</div>`;
+
+  loadPublicResults(); // runs independently; doesn't block the elections list above
 
   const { ok, data } = await API.get("/voter/public/elections");
   if (!ok) { container.innerHTML = `<p class="text-slate-400">Could not load elections.</p>`; return; }
@@ -221,6 +261,58 @@ async function submitVote() {
 
   document.getElementById("tx-hash").textContent = data.transaction_hash;
   showView("confirmation");
+}
+
+async function loadPublicResults() {
+  const section = document.getElementById("results-section");
+  const grid = document.getElementById("results-grid");
+
+  const { ok, data } = await API.get("/voter/public/results");
+  if (!ok || !data.elections.length) {
+    section.classList.add("hidden");
+    return;
+  }
+
+  section.classList.remove("hidden");
+  grid.innerHTML = data.elections.map(e => `
+    <div class="glass-card rounded-2xl p-6">
+      <div class="flex items-start justify-between mb-4 gap-3">
+        <h3 class="font-display text-lg text-white">${escapeHtml(e.title)}</h3>
+        <span class="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-white/10 border border-white/15 px-2.5 py-1 rounded-full"><i data-lucide="check-circle-2" class="w-3 h-3"></i> Final</span>
+      </div>
+
+      ${e.positions.map(pos => {
+        const total = pos.candidates.reduce((sum, c) => sum + c.votes, 0) || 1;
+        return `
+          <div class="mb-5 last:mb-0">
+            <p class="text-xs uppercase tracking-wide text-slate-400 mb-2.5">${escapeHtml(pos.title)}</p>
+            <div class="space-y-2.5">
+              ${pos.candidates.map((c, i) => {
+                const pct = Math.round((c.votes / total) * 100);
+                return `
+                  <div>
+                    <div class="flex items-center justify-between text-sm mb-1">
+                      <span class="${i === 0 ? 'text-white font-semibold' : 'text-slate-300'} flex items-center gap-1.5">
+                        ${escapeHtml(c.name)}
+                        ${i === 0 ? `<i data-lucide="crown" class="w-3.5 h-3.5 text-verified-light"></i>` : ""}
+                      </span>
+                      <span class="text-slate-400">${c.votes} votes · ${pct}%</span>
+                    </div>
+                    <div class="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                      <div class="h-full bg-gradient-to-r from-verified to-seal rounded-full" style="width:${pct}%"></div>
+                    </div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }).join("")}
+
+      <p class="text-xs text-slate-500 mt-2 pt-3 border-t border-white/10">${e.total_votes} total vote${e.total_votes === 1 ? "" : "s"} cast${e.tampered_detected ? ` · ${e.tampered_detected} record(s) flagged` : ""}</p>
+    </div>
+  `).join("");
+  refreshIcons();
 }
 
 function escapeHtml(str) {

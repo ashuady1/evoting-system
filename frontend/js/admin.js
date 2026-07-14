@@ -63,10 +63,25 @@ function initCreateFormPickers() {
 
 async function uploadVoters() {
   const raw = document.getElementById("voter-ids").value;
-  const ids = raw.split("\n").map(s => s.trim()).filter(Boolean);
-  if (!ids.length) return showMessage(dashMsg(), "Enter at least one student ID.", "error");
+  const lines = raw.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!lines.length) return showMessage(dashMsg(), "Enter at least one student ID and email.", "error");
 
-  const { ok, data } = await API.post("/admin/voters/upload", { student_ids: ids }, Session.getAdminToken());
+  const voters = [];
+  const malformed = [];
+  for (const line of lines) {
+    const parts = line.split(",").map(p => p.trim());
+    if (parts.length !== 2 || !parts[0] || !parts[1].includes("@")) {
+      malformed.push(line);
+      continue;
+    }
+    voters.push({ student_id: parts[0], email: parts[1] });
+  }
+
+  if (malformed.length) {
+    return showMessage(dashMsg(), `${malformed.length} line(s) aren't in "student_id,email" format — nothing was uploaded. Fix and try again.`, "error");
+  }
+
+  const { ok, data } = await API.post("/admin/voters/upload", { voters }, Session.getAdminToken());
   if (!ok) return showMessage(dashMsg(), data.error || "Upload failed.", "error");
   showMessage(dashMsg(), `Added ${data.added} student ID(s) to the authorized voter list.`, "success");
   document.getElementById("voter-ids").value = "";
@@ -93,6 +108,11 @@ async function loadAuthorizedVoters() {
           ? `<span class="inline-flex items-center gap-1 text-xs font-semibold text-verified"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Registered</span>`
           : `<span class="inline-flex items-center gap-1 text-xs font-semibold text-slate-400"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Not yet registered</span>`}
       </td>
+      <td class="py-2 text-sm">
+        ${e.has_email
+          ? `<span class="inline-flex items-center gap-1 text-xs text-slate-500"><i data-lucide="mail-check" class="w-3.5 h-3.5"></i> On file</span>`
+          : `<span class="inline-flex items-center gap-1 text-xs font-semibold text-seal"><i data-lucide="mail-x" class="w-3.5 h-3.5"></i> Missing — can't register</span>`}
+      </td>
       <td class="py-2 text-sm text-slate-400">${escapeHtmlA(e.added_at)}</td>
     </tr>
   `).join("");
@@ -101,7 +121,7 @@ async function loadAuthorizedVoters() {
     <div class="text-sm text-slate-500 mb-3">${data.registered_count} of ${data.total} authorized IDs have registered.</div>
     <div class="bg-white rounded-2xl border border-paper-200 shadow-card p-6 overflow-x-auto">
       <table class="w-full">
-        <thead><tr class="text-xs uppercase tracking-wide text-slate-400"><th class="text-left pb-2">ID fingerprint</th><th class="text-left pb-2">Status</th><th class="text-left pb-2">Added</th></tr></thead>
+        <thead><tr class="text-xs uppercase tracking-wide text-slate-400"><th class="text-left pb-2">ID fingerprint</th><th class="text-left pb-2">Status</th><th class="text-left pb-2">Email</th><th class="text-left pb-2">Added</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -333,16 +353,20 @@ async function loadResults() {
     return;
   }
 
-  const positions = electionDetail.ok ? electionDetail.data.election.positions : [];
-  const candidateName = {};
-  positions.forEach(pos => pos.candidates.forEach(c => { candidateName[c.candidate_id] = c.name; }));
+  const election = electionDetail.ok ? electionDetail.data.election : null;
+  const positions = election ? election.positions : [];
 
   const sections = positions.map(pos => {
     const tally = results.data.results[pos.position_id] || {};
-    const rowsHtml = Object.entries(tally)
-      .sort((a, b) => b[1] - a[1])
-      .map(([cid, count]) => `<tr class="border-b border-paper-100"><td class="py-2 text-sm">${escapeHtmlA(candidateName[cid] || ("Candidate " + cid))}</td><td class="py-2 text-sm font-semibold text-right">${count}</td></tr>`)
-      .join("") || `<tr><td colspan="2" class="py-2 text-sm text-slate-400 italic">No votes for this position</td></tr>`;
+    // Build from EVERY candidate on the ballot, not just tally keys — a
+    // candidate with zero votes has no key in `tally` at all, so building
+    // only from Object.entries(tally) would silently drop them from the
+    // admin view instead of correctly showing 0.
+    const rowsHtml = pos.candidates
+      .map(c => ({ name: c.name, votes: tally[c.candidate_id] || 0 }))
+      .sort((a, b) => b.votes - a.votes)
+      .map(c => `<tr class="border-b border-paper-100"><td class="py-2 text-sm">${escapeHtmlA(c.name)}</td><td class="py-2 text-sm font-semibold text-right">${c.votes}</td></tr>`)
+      .join("") || `<tr><td colspan="2" class="py-2 text-sm text-slate-400 italic">No candidates for this position</td></tr>`;
     return `
       <div class="bg-white rounded-2xl border border-paper-200 shadow-card p-6 mb-4">
         <h3 class="font-display text-lg text-ink-900 mb-3">${escapeHtmlA(pos.title)}</h3>
@@ -355,8 +379,25 @@ async function loadResults() {
     ? `<div class="p-4 rounded-xl bg-red-50 text-seal-dark text-sm mb-4 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4"></i> ${results.data.tampered_detected} vote record(s) failed integrity verification and were excluded.</div>`
     : `<div class="p-4 rounded-xl bg-verified-light text-verified-dark text-sm mb-4 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4"></i> All ${results.data.total_votes} vote record(s) passed integrity verification.</div>`;
 
-  display.innerHTML = tamperNote + sections;
+  let publishControl = "";
+  if (election && election.status === "closed") {
+    publishControl = election.results_published
+      ? `<div class="p-4 rounded-xl bg-verified-light text-verified-dark text-sm mb-4 flex items-center gap-2"><i data-lucide="globe" class="w-4 h-4"></i> Published to the voter portal on ${escapeHtmlA(election.published_at)}.</div>`
+      : `<div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm mb-4 flex items-center justify-between gap-3">
+           <span class="flex items-center gap-2"><i data-lucide="eye-off" class="w-4 h-4 shrink-0"></i> Not yet published — voters can't see these results.</span>
+           <button onclick="publishResults(${electionId})" class="px-4 py-2 rounded-full bg-seal hover:bg-seal-dark text-white text-sm font-semibold shadow-md transition shrink-0">Publish results</button>
+         </div>`;
+  }
+
+  display.innerHTML = publishControl + tamperNote + sections;
   refreshIcons();
+}
+
+async function publishResults(electionId) {
+  const { ok, data } = await API.post(`/admin/elections/${electionId}/publish`, {}, Session.getAdminToken());
+  if (!ok) return showMessage(dashMsg(), data.error || "Could not publish results.", "error");
+  showMessage(dashMsg(), "Results published — now visible on the voter portal.", "success");
+  loadResults();
 }
 
 async function loadAnomalies() {

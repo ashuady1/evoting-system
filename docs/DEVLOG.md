@@ -790,6 +790,194 @@ JS hooks present via the Flask test client.
 
 ---
 
+## Entry 19 — Publish results, and the project's first non-destructive migration
+
+**Decision:** Added a `results_published` (boolean-as-integer) and
+`published_at` column to `elections`. An admin can only publish once an
+election is `closed` (enforced server-side in `election_service.
+publish_results`, not just hidden in the UI) — publishing partial or
+in-progress results would leak who's ahead while voting is still open,
+which could influence turnout. Publishing is a one-way visibility flip,
+not a snapshot: the public endpoint re-tallies from the live vote
+records every time it's called (`ballot_service.tally_election`), so
+there's nothing to keep in sync or duplicate.
+
+**First genuinely non-destructive migration:** every earlier schema
+change in this project (candidate photos, etc.) just said "delete your
+local database and re-run `db.py`" — reasonable while there was no real
+data anywhere. That's no longer true: the project now has a live
+deployment on Neon with real elections/voters in it, so wiping and
+recreating the schema would destroy actual data. `database/
+migrate_add_results_published.py` adds the two new columns to an
+**existing** table without touching any row already in it — checked
+directly: created a database with an election row using the old schema,
+ran the migration, and confirmed the row survived completely unchanged
+with the new columns added at their defaults. Also confirmed the script
+is safe to run twice (PostgreSQL's `ADD COLUMN IF NOT EXISTS` is
+naturally idempotent; SQLite doesn't support that syntax, so the script
+checks `PRAGMA table_info` first). This establishes the pattern any
+future schema change should follow now that real data exists, rather
+than reverting to "just delete the database."
+
+**Bug caught before shipping, not after:** the first version of the
+public results endpoint built each position's candidate list directly
+from the vote tally's dictionary keys. `ballot_service.tally_election`
+only creates a dictionary entry for a candidate who received at least
+one vote — so a candidate with **zero votes** had no key at all, and
+would have silently vanished from the results entirely, rather than
+correctly showing 0. Caught this by deliberately testing a candidate
+with zero votes before considering the feature done, not by assuming
+the tally's shape. Fixed by building the candidate list from every
+candidate on the ballot (falling back to 0 if absent from the tally),
+sorted by vote count. The same bug existed in the *admin's* results
+table (pre-existing, not introduced by this change) and was fixed
+identically while touching that code, so both views now agree.
+
+**Voter portal Results section:** a new section on the home page, below
+"Ongoing elections," that stays hidden entirely (`display: none`,
+`.hidden` class) until `GET /voter/public/results` returns at least one
+election — so it never appears as an empty, confusing section before
+anything's been published. Shows each position as a small horizontal
+bar per candidate (leader marked with a crown icon), total votes cast,
+and a tamper-flag note if any records failed integrity verification —
+matching the same aggregate-only, no-login, no-individual-vote-exposure
+boundary as the turnout figures elsewhere on that page.
+
+**Admin Results tab:** loading a closed election's results now shows
+either a "Publish results" button (if not yet published) or a
+confirmation of when it was published — gated on the election's actual
+`status`/`results_published` fields returned by the API, not inferred
+from the UI state.
+
+**Validation approach:** `test_publish_results.py` (14 checks) — covers
+publishing rejected before closing, results invisible while open,
+results invisible when closed-but-unpublished, correct candidate names
+and vote counts once published, correct leader ordering, and
+idempotent re-publishing. All 96 checks across seven suites pass
+identically against both a fresh SQLite database and a real PostgreSQL
+instance.
+
+**Deployment note:** anyone with an already-running deployment (Neon,
+etc.) needs to run the migration once against production — see
+`DEPLOYMENT.md`'s updated migration section.
+
+---
+
+## Entry 20 — Closing the registration-binding gap with email verification
+
+**The problem, stated precisely:** registration only ever proved
+"knows a valid student ID" — not "is the person that ID belongs to."
+Student IDs aren't very secret in practice (printed on physical ID
+cards, visible in class rosters), so anyone who knew a classmate's ID
+could register as them and lock the real student out (an ID can only
+register once). This is a real, well-documented class of problem in
+remote e-voting called the **registration-binding** or **identity
+proofing** gap — the same category of criticism leveled at systems like
+Estonia's i-Voting (already cited in the literature review). No amount
+of cryptography inside the system fixes this on its own, because the
+gap isn't in the crypto — it's that nothing previously verified the
+person at the browser was really the ID's owner.
+
+**Options considered** (discussed with the person building this before
+implementing): (1) email verification against an admin-uploaded
+ID→email mapping, (2) admin pre-distributes credentials with no
+self-registration at all, (3) a registration PIN handed out through an
+identity-checked channel, (4) full SSO integration with the university's
+existing login system. Went with (1): it closes the gap meaningfully,
+needs no new physical-distribution logistics, and — importantly for a
+from-scratch security project — reuses the exact same HMAC/hashing
+patterns already built for TOTP, rather than introducing a fundamentally
+different mechanism.
+
+**How it works:** `authorized_voters` gained an `email_hash` column
+(same one-way, salted-with-pepper hashing as student IDs — the plaintext
+email is never persisted anywhere; it only ever exists in memory for the
+single request needed to send the verification email). Registration is
+now two steps, deliberately mirroring the existing login two-step
+pattern:
+
+1. `POST /voter/register/start` — checks the ID is authorized, checks
+   the submitted email's hash matches what's on file, generates a random
+   6-digit code (`os.urandom`-based, consistent with the project's one
+   deliberate carve-out for not hand-rolling entropy — see
+   `security/hashing.py`), and emails it. The intended password hash and
+   TOTP secret are generated now but not persisted — they travel inside
+   a signed, short-lived token (same `security/tokens.py` HMAC
+   construction used everywhere else), so an abandoned registration
+   attempt never leaves a half-created account behind. The code itself
+   is never embedded in that token in plaintext — only a salted hash of
+   it — specifically because the token *is* returned to the browser, and
+   putting the real code there would let anyone with the token skip
+   checking their email entirely, defeating the whole point.
+2. `POST /voter/register/verify` — checks the submitted code against
+   that stored hash, and only then actually creates the `voters` row.
+
+**Email sending, and the dev-mode fallback:** `services/email_service.py`
+uses Python's built-in `smtplib`/`email` modules (no new third-party
+dependency) against any standard SMTP provider — Gmail's free SMTP with
+an app password, or a free-tier transactional provider like Brevo, both
+workable within the zero-budget constraint. If no SMTP environment
+variables are configured, `send_verification_email` returns `False`
+rather than raising, and `start_registration` falls back to handing the
+code back directly in the API response as `dev_code`, clearly labeled as
+development/demo-only — the same established pattern as
+`routes/dev_routes.py`'s TOTP auto-fill. This keeps the whole
+registration flow fully demoable without needing a real inbox for every
+test account, while still being a genuinely working feature once SMTP
+credentials are set in production. **Real SMTP sending could not be
+tested from this sandbox** (no outbound internet access to mail
+servers here) — the dev-mode path was tested exhaustively instead;
+sending should be verified once against a real inbox after deploying.
+
+**Admin upload changed shape:** from a bare list of student IDs to
+ID+email pairs. Re-uploading an already-authorized ID now *updates* its
+email (an `UPSERT`, not `INSERT OR IGNORE`) — this is the intended way
+to backfill entries that were added before this feature existed, whose
+`email_hash` is `NULL` and therefore currently can't register at all.
+The admin's Authorized Voters list now shows an explicit "Missing — can't
+register" flag for any such entry.
+
+**Another non-destructive migration:** `database/
+migrate_add_email_hash.py`, same pattern as Entry 19's
+`migrate_add_results_published.py` — checked directly that it adds the
+column without touching existing rows, and that it's safe to run twice,
+on both a simulated pre-migration SQLite table and a real PostgreSQL
+instance.
+
+**Test suite impact — six files touched, one shared helper introduced:**
+every test file that registers a voter (`test_auth_flow.py`,
+`test_election_flow.py`, `test_ballot_flow.py`,
+`test_election_editing_and_turnout.py`, `test_publish_results.py`,
+`test_full_demo_flow.py`) had its own inline or locally-duplicated
+registration logic. Rather than patch six near-identical copies of the
+same two-step dance, extracted `test_helpers.py` with a single
+`authorize_register_and_login()` used everywhere now — reduces the
+chance of the test files silently drifting out of sync with each other
+on how registration actually works. `test_auth_flow.py` itself was
+substantially rewritten to specifically probe the new failure modes:
+missing email on file, wrong email, wrong code, re-verifying an
+already-spent token, and re-registering an already-registered ID.
+
+**Named limitation, stated honestly for the report:** this raises the
+bar from "knows a student ID" to "controls the matching official email
+account" — a meaningfully higher bar, but not a perfect one. If a
+student's email account itself is compromised or shared, the same
+impersonation risk reappears one level up. This is worth stating
+explicitly rather than implying the gap is fully closed — consistent
+with how every other limitation in this system has been handled (RSA key
+custody, vote-selling, admin auth not using TOTP).
+
+**Validation approach:** all 106 checks across seven suites pass
+identically against both a fresh SQLite database and a real PostgreSQL
+instance. Directly tested: wrong email rejected, no-email-on-file
+rejected, wrong code rejected, correct code completes registration,
+re-verifying a spent token rejected, re-registering an already-registered
+ID rejected (both at the start-registration stage and the
+already-completed stage), and that no voter row exists in the database
+between starting and completing registration.
+
+---
+
 ## Milestones checklist
 
 - [x] Project structure, requirements, README
@@ -809,4 +997,6 @@ JS hooks present via the Flask test client.
 - [x] Frontend: voter portal (register/login/vote) + admin dashboard
 - [x] UI overhaul: Tailwind/Google Fonts/Lucide/flatpickr, home dashboard with live turnout, modal auth, candidate photos, draft-only election editing
 - [x] PostgreSQL support for deployment, tested against a real instance (see DEPLOYMENT.md)
+- [x] Publish results to a public voter-facing section, with a non-destructive migration
+- [x] Email verification during registration (closes the registration-binding gap)
 - [ ] End-to-end test run + demo script for presentation
