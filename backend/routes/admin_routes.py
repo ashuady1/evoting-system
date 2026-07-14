@@ -13,7 +13,7 @@ from functools import wraps
 from flask import Blueprint, request, jsonify
 
 from database import queries
-from services.auth_service import hash_student_id, list_authorized_voters
+from services.auth_service import hash_student_id, hash_email, list_authorized_voters
 from security.hashing import generate_salt, hash_with_salt, verify_hash
 from security import tokens
 from security.config_secrets import SERVER_SECRET_KEY
@@ -63,20 +63,32 @@ def admin_login():
 @require_admin
 def upload_voters():
     """
-    Accepts { "student_ids": ["79010020", "79010054", ...] } and adds each
-    (hashed) to the authorized voter list. Only IDs added here will ever
-    be allowed to register.
+    Accepts { "voters": [{"student_id": "79010020", "email": "a@b.edu"}, ...] }
+    and adds each (hashed) to the authorized voter list. Email is required
+    now — see docs/DEVLOG.md on why registration needs to prove email
+    access, not just knowledge of a student ID. Re-uploading an ID that's
+    already authorized updates its email (see queries.add_authorized_voter),
+    which is the intended way to backfill entries added before this
+    feature existed.
     """
     data = request.get_json(silent=True) or {}
-    student_ids = data.get("student_ids", [])
+    voters = data.get("voters", [])
 
-    if not isinstance(student_ids, list) or not student_ids:
-        return jsonify({"success": False, "error": "Provide a non-empty list of student_ids."}), 400
+    if not isinstance(voters, list) or not voters:
+        return jsonify({"success": False, "error": "Provide a non-empty list of voters."}), 400
 
-    for student_id in student_ids:
-        queries.add_authorized_voter(hash_student_id(str(student_id)))
+    added = 0
+    skipped = []
+    for entry in voters:
+        student_id = str(entry.get("student_id", "")).strip() if isinstance(entry, dict) else ""
+        email = str(entry.get("email", "")).strip() if isinstance(entry, dict) else ""
+        if not student_id or not email or "@" not in email:
+            skipped.append(entry)
+            continue
+        queries.add_authorized_voter(hash_student_id(student_id), hash_email(email))
+        added += 1
 
-    return jsonify({"success": True, "added": len(student_ids)})
+    return jsonify({"success": True, "added": added, "skipped": len(skipped)})
 
 
 @admin_bp.route("/voters/list", methods=["GET"])
@@ -155,6 +167,13 @@ def open_election(election_id):
 @require_admin
 def close_election(election_id):
     result = election_service.close_election(election_id)
+    return jsonify(result), (200 if result["success"] else 400)
+
+
+@admin_bp.route("/elections/<int:election_id>/publish", methods=["POST"])
+@require_admin
+def publish_results(election_id):
+    result = election_service.publish_results(election_id)
     return jsonify(result), (200 if result["success"] else 400)
 
 

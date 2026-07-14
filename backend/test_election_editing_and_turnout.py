@@ -15,6 +15,7 @@ from database import queries
 from security.hashing import generate_salt, hash_with_salt
 from security.totp import generate_totp
 from services.auth_service import hash_student_id
+from test_helpers import authorize_register_and_login
 from app import app
 
 passed = 0
@@ -81,18 +82,8 @@ def main():
     check("Title unchanged after rejected edit", r.get_json()["election"]["title"] == "Corrected Title")
 
     # --- turnout starts at 0% with one registered voter ---
-    def register_and_login(student_id):
-        queries.add_authorized_voter(hash_student_id(student_id))
-        client.post("/voter/register", json={"student_id": student_id, "password": "correct-horse-battery-staple"})
-        r = client.post("/voter/login", json={"student_id": student_id, "password": "correct-horse-battery-staple"})
-        pending = r.get_json()["pending_token"]
-        voter = queries.get_voter_by_id_hash(hash_student_id(student_id))
-        code = generate_totp(bytes.fromhex(voter["totp_secret"]))
-        r = client.post("/voter/login/verify-otp", json={"pending_token": pending, "code": code})
-        return {"Authorization": f"Bearer {r.get_json()['session_token']}"}
-
-    voter_a = register_and_login("79010020")
-    voter_b = register_and_login("79010054")
+    voter_a = authorize_register_and_login(client, "79010020", "voter.a@pmc.edu.np")
+    voter_b = authorize_register_and_login(client, "79010054", "voter.b@pmc.edu.np")
 
     r = client.get("/voter/public/elections")
     stats = r.get_json()["elections"][0]

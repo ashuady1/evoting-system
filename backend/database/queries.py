@@ -11,16 +11,26 @@ from .db import run_query, run_insert, IS_POSTGRES
 
 # ---- authorized_voters -----------------------------------------------
 
-def add_authorized_voter(id_hash: str):
+def add_authorized_voter(id_hash: str, email_hash: str):
+    """
+    Upserts rather than "insert or ignore": if this ID was already
+    authorized (e.g. from before email verification existed, so its
+    email_hash is NULL), re-uploading it with an email now fixes that
+    row in place instead of silently doing nothing — this is the
+    intended way to backfill old entries after
+    database/migrate_add_email_hash.py.
+    """
     if IS_POSTGRES:
         run_query(
-            "INSERT INTO authorized_voters (student_id_hash) VALUES (?) ON CONFLICT (student_id_hash) DO NOTHING",
-            (id_hash,),
+            """INSERT INTO authorized_voters (student_id_hash, email_hash) VALUES (?, ?)
+               ON CONFLICT (student_id_hash) DO UPDATE SET email_hash = EXCLUDED.email_hash""",
+            (id_hash, email_hash),
         )
     else:
         run_query(
-            "INSERT OR IGNORE INTO authorized_voters (student_id_hash) VALUES (?)",
-            (id_hash,),
+            """INSERT INTO authorized_voters (student_id_hash, email_hash) VALUES (?, ?)
+               ON CONFLICT (student_id_hash) DO UPDATE SET email_hash = excluded.email_hash""",
+            (id_hash, email_hash),
         )
 
 
@@ -32,6 +42,13 @@ def is_authorized(id_hash: str) -> bool:
     return row is not None
 
 
+def get_authorized_voter(id_hash: str):
+    return run_query(
+        "SELECT * FROM authorized_voters WHERE student_id_hash = ?",
+        (id_hash,), fetch="one",
+    )
+
+
 def list_authorized_voters():
     """
     Returns every authorized entry with its (one-way) hash and whether
@@ -41,7 +58,7 @@ def list_authorized_voters():
     registration status, not the literal ID that was uploaded.
     """
     return run_query(
-        """SELECT av.student_id_hash, av.added_at,
+        """SELECT av.student_id_hash, av.added_at, av.email_hash,
                   (v.id IS NOT NULL) AS is_registered
            FROM authorized_voters av
            LEFT JOIN voters v ON v.student_id_hash = av.student_id_hash

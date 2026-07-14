@@ -15,6 +15,7 @@ from database import queries
 from security.hashing import generate_salt, hash_with_salt
 from security.totp import generate_totp
 from services.auth_service import hash_student_id
+from test_helpers import authorize_register_and_login
 from app import app
 
 passed = 0
@@ -88,15 +89,7 @@ def main():
     check("Ballot viewing without a session token is rejected", r.status_code == 401)
 
     # --- register + fully log in a voter ---
-    queries.add_authorized_voter(hash_student_id("79010020"))
-    client.post("/voter/register", json={"student_id": "79010020", "password": "correct-horse-battery-staple"})
-    r = client.post("/voter/login", json={"student_id": "79010020", "password": "correct-horse-battery-staple"})
-    pending_token = r.get_json()["pending_token"]
-    voter = queries.get_voter_by_id_hash(hash_student_id("79010020"))
-    code = generate_totp(bytes.fromhex(voter["totp_secret"]))
-    r = client.post("/voter/login/verify-otp", json={"pending_token": pending_token, "code": code})
-    session_token = r.get_json()["session_token"]
-    voter_headers = {"Authorization": f"Bearer {session_token}"}
+    voter_headers = authorize_register_and_login(client, "79010020", "s79010020@pmc.edu.np")
 
     # --- now the ballot should be visible, with both positions and all candidates ---
     r = client.get(f"/voter/elections/{election_id}/ballot", headers=voter_headers)

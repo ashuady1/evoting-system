@@ -15,6 +15,7 @@ from database import queries_elections as q
 from database import queries as auth_q
 from database import queries_votes as vote_q
 from security import rsa_custom
+from services import ballot_service
 
 
 def create_election(title: str, start_time: str, end_time: str) -> dict:
@@ -84,6 +85,8 @@ def get_election_structure(election_id: int) -> dict | None:
         "status": election["status"],
         "start_time": election["start_time"],
         "end_time": election["end_time"],
+        "results_published": bool(election["results_published"]),
+        "published_at": str(election["published_at"]) if election["published_at"] else None,
         "positions": positions,
     }
 
@@ -130,6 +133,71 @@ def close_election(election_id: int) -> dict:
         return {"success": False, "error": "Only an open election can be closed."}
     q.update_election_status(election_id, "closed")
     return {"success": True}
+
+
+def publish_results(election_id: int) -> dict:
+    """
+    Makes a closed election's tally visible on the public voter-facing
+    home page. Deliberately restricted to closed elections only — the
+    same reasoning as everywhere else in this file: publishing partial
+    or in-progress results would leak information about who's ahead
+    while voting is still happening, and could influence turnout.
+    Publishing is a one-way visibility flip, not a snapshot — the public
+    endpoint re-tallies from the live vote records every time it's
+    called, so nothing needs to be duplicated or kept in sync here.
+    """
+    election = q.get_election(election_id)
+    if election is None:
+        return {"success": False, "error": "Election not found."}
+    if election["status"] != "closed":
+        return {"success": False, "error": "Results can only be published after the election is closed."}
+    q.publish_election_results(election_id)
+    return {"success": True}
+
+
+def get_public_results() -> list:
+    """
+    Public (no-login) view of results for every closed AND published
+    election — used by the voter portal's home page "Results" section.
+    Never exposes anything beyond aggregate candidate vote counts, same
+    anonymity boundary as the turnout figures elsewhere on that page.
+    """
+    elections = q.list_published_closed_elections()
+    output = []
+
+    for e in elections:
+        structure = get_election_structure(e["id"])
+        tally = ballot_service.tally_election(e["id"])
+        if not tally["success"]:
+            continue
+
+        positions_result = []
+        for pos in structure["positions"]:
+            counts = tally["results"].get(pos["position_id"], {})
+            # Build from EVERY candidate on the ballot, not just the ones
+            # that appear in the tally — a candidate with zero votes has
+            # no key in `counts` at all (see ballot_service.tally_election),
+            # so building only from tally.items() would silently drop them
+            # from the public results instead of correctly showing 0.
+            candidates_result = sorted(
+                [
+                    {"name": c["name"], "votes": counts.get(c["candidate_id"], 0)}
+                    for c in pos["candidates"]
+                ],
+                key=lambda c: -c["votes"],
+            )
+            positions_result.append({"title": pos["title"], "candidates": candidates_result})
+
+        output.append({
+            "election_id": e["id"],
+            "title": e["title"],
+            "published_at": str(e["published_at"]) if e["published_at"] else None,
+            "positions": positions_result,
+            "total_votes": tally["total_votes"],
+            "tampered_detected": tally["tampered_detected"],
+        })
+
+    return output
 
 
 def get_ballot_for_voting(election_id: int) -> dict:

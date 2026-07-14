@@ -59,7 +59,11 @@ def main():
     admin_headers = {"Authorization": f"Bearer {r.get_json()['token']}"}
 
     # --- admin uploads authorized voters (same as pasting into the textarea) ---
-    r = client.post("/admin/voters/upload", json={"student_ids": ["79010020", "79010054", "79010119"]}, headers=admin_headers)
+    r = client.post("/admin/voters/upload", json={"voters": [
+        {"student_id": "79010020", "email": "ashutosh@pmc.edu.np"},
+        {"student_id": "79010054", "email": "manish@pmc.edu.np"},
+        {"student_id": "79010119", "email": "snehal@pmc.edu.np"},
+    ]}, headers=admin_headers)
     check("Admin uploads authorized voter list", r.status_code == 200 and r.get_json()["added"] == 3)
 
     # --- admin builds the election ---
@@ -87,9 +91,23 @@ def main():
     r = client.get("/admin/elections", headers=admin_headers)
     check("Admin dashboard can list all elections", r.status_code == 200 and len(r.get_json()["elections"]) == 1)
 
-    # --- voter registers (same as the Register form) ---
-    r = client.post("/voter/register", json={"student_id": "79010020", "password": "correct-horse-battery-staple"})
-    check("Voter registers", r.status_code == 201 and r.get_json()["success"])
+    # --- voter starts registration (same as the Register form) ---
+    r = client.post("/voter/register/start", json={
+        "student_id": "79010020", "email": "ashutosh@pmc.edu.np", "password": "correct-horse-battery-staple",
+    })
+    check("Voter starts registration", r.status_code == 200 and r.get_json()["success"])
+    pending_registration_token = r.get_json()["pending_registration_token"]
+
+    # --- voter clicks "Auto-fill code (dev)" on the verification step —
+    #     same dev_code fallback the frontend uses when no SMTP is configured ---
+    dev_code = r.get_json().get("dev_code")
+    check("A dev_code is returned when email sending isn't configured", bool(dev_code))
+
+    # --- voter completes registration by entering the code ---
+    r = client.post("/voter/register/verify", json={
+        "pending_registration_token": pending_registration_token, "code": dev_code,
+    })
+    check("Voter completes registration with the verification code", r.status_code == 201 and r.get_json()["success"])
     totp_secret = r.get_json()["totp_secret"]
 
     # --- voter logs in, step 1 ---

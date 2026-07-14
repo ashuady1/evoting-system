@@ -34,6 +34,16 @@ def public_elections():
     return jsonify({"success": True, "elections": election_service.list_open_elections_with_turnout()})
 
 
+@voter_bp.route("/public/results", methods=["GET"])
+def public_results():
+    """
+    No login required. Shows candidate vote counts for every closed AND
+    admin-published election — nothing for elections still open or not
+    yet published.
+    """
+    return jsonify({"success": True, "elections": election_service.get_public_results()})
+
+
 def require_voter_session(view_func):
     """Decorator: rejects the request unless a valid, non-expired session
     token is present AND was issued to this same device fingerprint."""
@@ -53,11 +63,20 @@ def require_voter_session(view_func):
     return wrapper
 
 
-@voter_bp.route("/register", methods=["POST"])
-def register():
+@voter_bp.route("/register/start", methods=["POST"])
+def register_start():
     data = request.get_json(silent=True) or {}
-    result = auth_service.register_voter(
-        data.get("student_id", ""), data.get("password", "")
+    result = auth_service.start_registration(
+        data.get("student_id", ""), data.get("email", ""), data.get("password", "")
+    )
+    return jsonify(result), (200 if result["success"] else 400)
+
+
+@voter_bp.route("/register/verify", methods=["POST"])
+def register_verify():
+    data = request.get_json(silent=True) or {}
+    result = auth_service.verify_registration(
+        data.get("pending_registration_token", ""), data.get("code", "")
     )
     return jsonify(result), (201 if result["success"] else 400)
 

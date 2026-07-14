@@ -26,6 +26,20 @@ def update_election_status(election_id: int, status: str):
     run_query("UPDATE elections SET status = ? WHERE id = ?", (status, election_id))
 
 
+def publish_election_results(election_id: int):
+    run_query(
+        "UPDATE elections SET results_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (election_id,),
+    )
+
+
+def list_published_closed_elections():
+    return run_query(
+        "SELECT * FROM elections WHERE status = 'closed' AND results_published = 1 ORDER BY id DESC",
+        fetch="all",
+    )
+
+
 def update_election_details(election_id: int, title: str, start_time: str, end_time: str):
     run_query(
         "UPDATE elections SET title = ?, start_time = ?, end_time = ? WHERE id = ?",

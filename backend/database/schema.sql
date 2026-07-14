@@ -21,9 +21,18 @@ CREATE TABLE IF NOT EXISTS admins (
 -- Pre-loaded by an admin BEFORE anyone can register. Only a student ID
 -- whose hash appears here is allowed to create an account. This is what
 -- stops a random person from just inventing an ID and registering.
+--
+-- email_hash: added to close a real gap — knowing a student ID alone
+-- (often not very secret: printed on ID cards, class rosters) used to be
+-- enough to register AS that student. Registration now also requires
+-- proving access to the matching official email via a sent verification
+-- code (see services/auth_service.py). Nullable for backward
+-- compatibility with any authorized_voters row added before this
+-- feature existed — see database/migrate_add_email_hash.py.
 CREATE TABLE IF NOT EXISTS authorized_voters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id_hash TEXT UNIQUE NOT NULL,   -- SHA-256(student_id + system_salt)
+    email_hash TEXT,                        -- SHA-256(normalized_email + system_salt)
     added_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -47,6 +56,8 @@ CREATE TABLE IF NOT EXISTS elections (
     status TEXT NOT NULL DEFAULT 'draft',   -- draft | open | closed
     rsa_public_key TEXT,                    -- (n, e) generated per election
     rsa_private_key TEXT,                   -- (n, d) — see docs/DEVLOG.md re: key custody
+    results_published INTEGER NOT NULL DEFAULT 0,  -- admin must explicitly publish before voters see results
+    published_at TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS admins (
 CREATE TABLE IF NOT EXISTS authorized_voters (
     id SERIAL PRIMARY KEY,
     student_id_hash TEXT UNIQUE NOT NULL,
+    email_hash TEXT,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -39,6 +40,8 @@ CREATE TABLE IF NOT EXISTS elections (
     status TEXT NOT NULL DEFAULT 'draft',
     rsa_public_key TEXT,
     rsa_private_key TEXT,
+    results_published INTEGER NOT NULL DEFAULT 0,
+    published_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

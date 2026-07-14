@@ -16,6 +16,7 @@ from database import queries
 from security.hashing import generate_salt, hash_with_salt
 from security.totp import generate_totp
 from services.auth_service import hash_student_id
+from test_helpers import authorize_register_and_login
 from app import app
 
 passed = 0
@@ -30,19 +31,6 @@ def check(label, condition):
     else:
         print(f"[FAIL] {label}")
         failed += 1
-
-
-def register_and_login(client, student_id, password="correct-horse-battery-staple"):
-    """Helper: authorize, register, and fully log in a voter. Returns headers dict."""
-    queries.add_authorized_voter(hash_student_id(student_id))
-    client.post("/voter/register", json={"student_id": student_id, "password": password})
-    r = client.post("/voter/login", json={"student_id": student_id, "password": password})
-    pending_token = r.get_json()["pending_token"]
-    voter = queries.get_voter_by_id_hash(hash_student_id(student_id))
-    code = generate_totp(bytes.fromhex(voter["totp_secret"]))
-    r = client.post("/voter/login/verify-otp", json={"pending_token": pending_token, "code": code})
-    session_token = r.get_json()["session_token"]
-    return {"Authorization": f"Bearer {session_token}"}
 
 
 def main():
@@ -87,9 +75,9 @@ def main():
     check("RSA keypair was generated and stored on open", election_row["rsa_public_key"] is not None and election_row["rsa_private_key"] is not None)
 
     # --- three voters ---
-    voter_a_headers = register_and_login(client, "79010020")
-    voter_b_headers = register_and_login(client, "79010054")
-    voter_c_headers = register_and_login(client, "79010119")
+    voter_a_headers = authorize_register_and_login(client, "79010020", "voter.a@pmc.edu.np")
+    voter_b_headers = authorize_register_and_login(client, "79010054", "voter.b@pmc.edu.np")
+    voter_c_headers = authorize_register_and_login(client, "79010119", "voter.c@pmc.edu.np")
 
     # --- voter A votes: Alice for President, Carol for Secretary ---
     r = client.post(
