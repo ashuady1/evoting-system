@@ -107,7 +107,21 @@ def start_registration(student_id: str, email: str, password: str) -> dict:
 
     result = {"success": True, "pending_registration_token": pending_token}
 
-    sent = email_service.send_verification_email(email, code)
+    try:
+        sent = email_service.send_verification_email(email, code)
+    except Exception as e:
+        # A real SMTP failure (wrong credentials, unverified sender,
+        # network issue) must not crash the whole request — that just
+        # shows the person an opaque, unhelpful error. Log the real
+        # exception server-side (visible in Render's Logs tab) so the
+        # actual cause can be diagnosed, and return a clean, honest
+        # message instead of letting it propagate as an unhandled 500.
+        print(f"[auth_service] Failed to send verification email to {email!r}: {e!r}")
+        return {
+            "success": False,
+            "error": "We couldn't send the verification email right now. Please try again in a moment, or contact the election admin if this keeps happening.",
+        }
+
     if sent:
         result["message"] = f"A verification code was sent to {email}."
     else:
