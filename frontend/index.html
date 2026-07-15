@@ -122,10 +122,41 @@
   </section>
 </main>
 
+<footer class="relative z-10 border-t border-white/10 mt-8">
+  <div class="max-w-6xl mx-auto px-6 py-10">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+      <div>
+        <div class="flex items-center gap-2.5 font-display text-base text-white mb-2">
+          <svg viewBox="0 0 24 24" fill="none" class="w-5 h-5"><circle cx="12" cy="12" r="9.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Student Elections
+        </div>
+        <p class="text-sm text-slate-400 max-w-sm">A secure, verifiable e-voting platform built for campus elections — every ballot encrypted, every vote counted once.</p>
+      </div>
+
+      <div class="flex flex-col gap-2 text-sm text-slate-400">
+        <a href="mailto:elections@pmc.edu.np" class="hover:text-white flex items-center gap-2 transition"><i data-lucide="mail" class="w-4 h-4"></i> elections@pmc.edu.np</a>
+        <a href="/admin" class="hover:text-white flex items-center gap-2 transition"><i data-lucide="shield" class="w-4 h-4"></i> Admin portal</a>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="#" aria-label="Facebook" class="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-slate-400 hover:text-white hover:border-white/30 transition"><i data-lucide="facebook" class="w-4 h-4"></i></a>
+        <a href="#" aria-label="Instagram" class="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-slate-400 hover:text-white hover:border-white/30 transition"><i data-lucide="instagram" class="w-4 h-4"></i></a>
+        <a href="#" aria-label="Twitter / X" class="w-9 h-9 rounded-full border border-white/15 flex items-center justify-center text-slate-400 hover:text-white hover:border-white/30 transition"><i data-lucide="twitter" class="w-4 h-4"></i></a>
+      </div>
+    </div>
+
+    <div class="mt-8 pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+      <p>&copy; <span id="footer-year"></span> Student Elections. All rights reserved.</p>
+      <p>Built for Tribhuvan University, Patan Multiple Campus.</p>
+    </div>
+  </div>
+</footer>
+
 <!-- ===================== LOGIN MODAL ===================== -->
 <div id="modal-login" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
   <div class="bg-ink-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-7 relative reanimate">
     <button onclick="closeModal('login')" class="absolute top-4 right-4 text-slate-400 hover:text-white transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <div id="login-msg"></div>
 
     <div id="login-step-1">
       <h3 class="font-display text-xl mb-1 text-white">Log in</h3>
@@ -151,6 +182,7 @@
 <div id="modal-register" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
   <div class="bg-ink-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-sm p-7 relative reanimate">
     <button onclick="closeModal('register')" class="absolute top-4 right-4 text-slate-400 hover:text-white transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+    <div id="register-msg"></div>
 
     <div id="register-step-form">
       <h3 class="font-display text-xl mb-1 text-white">Register to vote</h3>

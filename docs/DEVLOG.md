@@ -978,6 +978,56 @@ between starting and completing registration.
 
 ---
 
+## Entry 21 — Three UI fixes: sidebar scroll, footer, and modal error visibility
+
+**Admin sidebar drifting off-screen — root cause:** `<aside>` had no
+explicit height, so it stretched to match its flex sibling (the main
+content column) via the default `align-items: stretch` behavior. Once
+the main column grew taller than the viewport (e.g. many elections
+listed, long results tables), the whole row grew with it, dragging the
+`mt-auto`-pinned "Sign out" button down below the fold along with it —
+technically still "at the bottom of the sidebar," just a sidebar that
+had become taller than the screen. Fixed by making the sidebar `sticky
+top-16 h-[calc(100vh-4rem)] overflow-y-auto` — pinned to the viewport,
+self-contained height, scrolls its own contents independently if the
+nav list ever got long enough to need it, rather than dragging the main
+content's height into its own layout.
+
+**Voter portal footer:** there was no footer at all — the "blank
+section" was just the page ending after the last piece of content, with
+nothing to fill the remaining dark background. Added a real footer:
+brand name/tagline, contact + admin portal links, social icons (currently
+placeholder `href="#"` links — swap in real profile URLs whenever the
+actual accounts exist), and a copyright line with a JS-populated current
+year rather than a hardcoded one that goes stale.
+
+**Error messages hidden behind modals — root cause:** the page had a
+single message container (`#msg`) living inside `<main>` at `z-10`,
+while the login/register modals render at `z-40` with an opaque
+backdrop (`bg-black/70 backdrop-blur-sm`) covering the entire page
+underneath. Every login/registration error was correctly being shown —
+just behind the modal's own backdrop, invisible until the modal closed.
+Fixed by giving each modal (`modal-login`, `modal-register`) its own
+message container at the top of the modal card itself, and updating
+every login/registration-related error (`doLoginStep1`, `autofillOtp`,
+`doLoginStep2`, `doRegister`, `doVerifyRegistration`) to target the
+correct modal's container instead of the shared page-level one. Both
+modal message boxes are also explicitly cleared on open *and* close, so
+a stale error from a previous attempt can't linger into the next one.
+Ballot-page errors (`openBallot`, `submitVote`) were left targeting the
+shared page-level box, correctly — those aren't modals, so the original
+container was never the problem there.
+
+**Validation approach:** this was a frontend/CSS/markup-only change with
+no backend touched, but re-ran the full backend suite (106 checks
+across seven files) anyway to confirm nothing else regressed. Confirmed
+via the Flask test client that both pages serve the new markup
+(`login-msg`/`register-msg` containers, the sidebar's sticky/height
+classes, the footer content) and that `voter.js` exposes the new
+`loginMsgBox()`/`registerMsgBox()` accessors.
+
+---
+
 ## Milestones checklist
 
 - [x] Project structure, requirements, README

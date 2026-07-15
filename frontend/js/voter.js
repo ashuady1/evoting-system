@@ -3,6 +3,8 @@
    views. */
 
 const msgBox = () => document.getElementById("msg");
+const loginMsgBox = () => document.getElementById("login-msg");
+const registerMsgBox = () => document.getElementById("register-msg");
 
 let pendingToken = null;
 let pendingRegistrationToken = null;
@@ -37,6 +39,8 @@ function openModal(name) {
   modal.classList.remove("hidden");
   modal.classList.add("flex");
   reanimate(modal.firstElementChild);
+  clearMessage(loginMsgBox());
+  clearMessage(registerMsgBox());
   if (name === "login") {
     document.getElementById("login-step-1").classList.remove("hidden");
     document.getElementById("login-step-2").classList.add("hidden");
@@ -59,6 +63,8 @@ function closeModal(name) {
   const modal = document.getElementById("modal-" + name);
   modal.classList.add("hidden");
   modal.classList.remove("flex");
+  clearMessage(loginMsgBox());
+  clearMessage(registerMsgBox());
 }
 
 function updateAuthUI() {
@@ -89,11 +95,11 @@ async function doRegister() {
   const confirmPassword = document.getElementById("reg-pw-confirm").value;
 
   if (password !== confirmPassword) {
-    return showMessage(msgBox(), "Passwords don't match — please retype them.", "error");
+    return showMessage(registerMsgBox(), "Passwords don't match — please retype them.", "error");
   }
 
   const { ok, data } = await API.post("/voter/register/start", { student_id: studentId, email, password });
-  if (!ok) return showMessage(msgBox(), data.error || "Registration failed.", "error");
+  if (!ok) return showMessage(registerMsgBox(), data.error || "Registration failed.", "error");
 
   currentStudentId = studentId;
   pendingRegistrationToken = data.pending_registration_token;
@@ -123,7 +129,7 @@ async function doVerifyRegistration() {
   const { ok, data } = await API.post("/voter/register/verify", {
     pending_registration_token: pendingRegistrationToken, code,
   });
-  if (!ok) return showMessage(msgBox(), data.error || "Verification failed.", "error");
+  if (!ok) return showMessage(registerMsgBox(), data.error || "Verification failed.", "error");
 
   Session.saveDemoSecret(currentStudentId, data.totp_secret);
   document.getElementById("reg-secret-display").textContent = data.totp_secret;
@@ -138,7 +144,7 @@ async function doLoginStep1() {
   const studentId = document.getElementById("login-id").value.trim();
   const password = document.getElementById("login-pw").value;
   const { ok, data } = await API.post("/voter/login", { student_id: studentId, password });
-  if (!ok) return showMessage(msgBox(), data.error || "Login failed.", "error");
+  if (!ok) return showMessage(loginMsgBox(), data.error || "Login failed.", "error");
 
   pendingToken = data.pending_token;
   currentStudentId = studentId;
@@ -148,16 +154,16 @@ async function doLoginStep1() {
 
 async function autofillOtp() {
   const secret = Session.getDemoSecret(currentStudentId);
-  if (!secret) return showMessage(msgBox(), "No demo secret saved for this ID in this browser — enter the code manually.", "info");
+  if (!secret) return showMessage(loginMsgBox(), "No demo secret saved for this ID in this browser — enter the code manually.", "info");
   const { ok, data } = await API.post("/dev/generate-otp", { secret });
-  if (!ok) return showMessage(msgBox(), data.error || "Could not generate a demo code.", "error");
+  if (!ok) return showMessage(loginMsgBox(), data.error || "Could not generate a demo code.", "error");
   document.getElementById("login-otp").value = data.code;
 }
 
 async function doLoginStep2() {
   const code = document.getElementById("login-otp").value.trim();
   const { ok, data } = await API.post("/voter/login/verify-otp", { pending_token: pendingToken, code });
-  if (!ok) return showMessage(msgBox(), data.error || "Verification failed.", "error");
+  if (!ok) return showMessage(loginMsgBox(), data.error || "Verification failed.", "error");
 
   Session.setVoterToken(data.session_token);
   closeModal("login");
@@ -322,6 +328,8 @@ function escapeHtml(str) {
 }
 
 (async function init() {
+  const yearEl = document.getElementById("footer-year");
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
   updateAuthUI();
   await loadHome();
   showView("home");
